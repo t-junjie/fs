@@ -18,3 +18,11 @@ fs is a simple server program that provides support for the followng workflow.
 To be updated
 
 ## How to run and test
+
+Download and install Postman for testing. Run the server and initiate an appropriate request to http://localhost:8080/files via Postman. Test data is available in the data/ directory.
+
+### Upload File
+
+Send a POST request to http://localhost:8080/files.The request body must be of the type multipart/form-data, where "file" is the key and "data/test.bin" is the value, the binary file to be sent.
+
+![UploadFile](./data/Uploading.png)
