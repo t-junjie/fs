@@ -1,15 +1,16 @@
+// package router provides methods to upload, remove and retrieve information of
+// files on a server.
 package router
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
-	"math/rand"
 	"net/http"
-	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/t-junjie/fs/pkg/storage"
 )
 
 // Start initiates the routing for server on http://localhost:8080
@@ -36,116 +37,96 @@ func Start() error {
 }
 
 // save file data on server until database is implemented
-var files = make(map[FileInfo]File)
-
-// type File [][]int
-type File interface{}
-type FileInfo struct {
-	ID             int
-	FileName, Size string
-}
+var files = make(map[storage.FileInfo][][]int)
 
 type Message struct {
-	Message string     `json:"message,omitempty"`
-	Files   []FileInfo `json:"files,omitempty"`
+	Files []storage.FileInfo `json:"files"`
 }
 
 func handleFileUpload(w http.ResponseWriter, r *http.Request) {
-	// Accept a multipart form of up to 10MB
-	err := r.ParseMultipartForm(10 << 20)
-	if err != nil {
-		msg := Message{Message: "File size exceeded"}
-		writeResponse(w, http.StatusInternalServerError, msg)
-	}
-
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		msg := Message{Message: "Could not get the uploaded file"}
-		writeResponse(w, http.StatusInternalServerError, msg)
+		msg := Message{}
+		writeResponse(w, http.StatusBadRequest, msg)
 	}
 
 	defer file.Close()
-	fmt.Printf("filename:%s, size:%s\n", header.Filename, ByteCountSI(header.Size))
 
-	buf := new(bytes.Buffer)
-	if _, err := io.Copy(buf, file); err != nil {
-		msg := Message{Message: "Fail to copy file data to buffer"}
+	// [filename ext]
+	ext := strings.Split(header.Filename, ".")[1]
+	if ext != "csv" {
+		msg := Message{}
+		writeResponse(w, http.StatusBadRequest, msg)
+	}
+
+	tbl, err := storage.ConvertToTable(file)
+	if err != nil {
+		msg := Message{}
 		writeResponse(w, http.StatusInternalServerError, msg)
 	}
 
-	// TODO: Find a way to create binary data to test
-	// var dataString [][]int
-	// err = binary.Read(buf, binary.LittleEndian, dataString)
-	// if err != nil {
-	// 	w.WriteHeader(http.StatusInternalServerError)
-	// 	w.Write([]byte("binary.Read failed"))
-	// 	fmt.Println(err)
-	// }
+	rowCount, colCount := storage.Size(tbl)
 
-	fInfo := FileInfo{
-		ID:       rand.Intn(100),
-		FileName: header.Filename,
+	info := storage.FileInfo{
+		Id:       uuid.New(),
+		Name:     header.Filename,
 		Size:     ByteCountSI(header.Size),
+		RowCount: rowCount,
+		ColCount: colCount,
 	}
 
-	files[fInfo] = buf
-	msg := Message{
-		Message: "success",
-		Files:   []FileInfo{fInfo},
-	}
+	files[info] = tbl
+
+	msg := Message{Files: []storage.FileInfo{info}}
 	writeResponse(w, http.StatusOK, msg)
 
 }
 
 func getFiles(w http.ResponseWriter, r *http.Request) {
-	var info []FileInfo
+	info := make([]storage.FileInfo, 0)
 	for i := range files {
 		info = append(info, i)
 	}
 
-	msg := Message{
-		Message: "success",
-		Files:   info}
+	msg := Message{Files: info}
 
 	writeResponse(w, http.StatusOK, msg)
 }
 
 func getFileDetails(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
-	id, err := strconv.Atoi(fileID)
-	if err != nil {
-		// return 500
-	}
 
-	var f File
-	for i, file := range files {
-		if id == i.ID {
-			f = file
+	info := make([]storage.FileInfo, 0)
+
+	id, err := uuid.Parse(fileID)
+	if err == nil {
+		for i := range files {
+			if id == i.Id {
+				info = append(info, i)
+				break
+			}
 		}
 	}
 
-	fmt.Println(f)
+	msg := Message{Files: info}
+	writeResponse(w, http.StatusOK, msg)
 
 }
 
 func removeFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
-	id, err := strconv.Atoi(fileID)
-	if err != nil {
-		// return 500
-	}
+	id := uuid.MustParse(fileID)
 
-	var info FileInfo
+	var info storage.FileInfo
 	for i := range files {
-		if id == i.ID {
+		if id == i.Id {
 			info = i
 			delete(files, i)
 		}
 	}
 
 	msg := Message{
-		Message: "success",
-		Files:   []FileInfo{info},
+		Files: []storage.FileInfo{info},
 	}
 	writeResponse(w, http.StatusOK, msg)
 }

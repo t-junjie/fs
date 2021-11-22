@@ -23,6 +23,6 @@ Download and install Postman for testing. Run the server and initiate an appropr
 
 ### Upload File
 
-Send a POST request to http://localhost:8080/files.The request body must be of the type multipart/form-data, where "file" is the key and "data/test.bin" is the value, the binary file to be sent.
+Send a POST request to http://localhost:8080/files. The request body must be of the type multipart/form-data, where "file" is the key and "data/test.csv" is the value, the binary file to be sent.
 
 ![UploadFile](./data/Uploading.png)
