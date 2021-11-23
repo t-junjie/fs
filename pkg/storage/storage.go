@@ -12,16 +12,17 @@ import (
 )
 
 type FileInfo struct {
-	Id       uuid.UUID `json:"id,omitempty"`
-	Name     string    `json:"name,omitempty"`
-	Size     string    `json:"size,omitempty"`
-	RowCount int       `json:"rowcount,omitempty"`
-	ColCount int       `json:"colcount,omitempty"`
+	Id       *uuid.UUID `json:"id,omitempty"`
+	Name     string     `json:"name,omitempty"`
+	Size     string     `json:"size,omitempty"`
+	RowCount int        `json:"rows,omitempty"`
+	ColCount int        `json:"cols,omitempty"`
 }
 
 type Cell struct {
-	row int
-	col int
+	Id  uuid.UUID `json:"uuid"`
+	Row int       `json:"row"`
+	Col int       `json:"col"`
 }
 
 // ConvertToTable takes a csv file and converts it to a Table.
@@ -64,11 +65,11 @@ func Size(tbl [][]int) (row, col int) {
 	return
 }
 
-// // Items returns a list of integers from the cells of the table.
-// func Items(cells []Cell) []int {
-// 	list := make([]int, 0, len(cells))
-// 	for _, c := range cells {
-// 		list = append(list, t[c.row][c.col])
-// 	}
-// 	return list
-// }
+// Items returns a list of integers from the cells of the table.
+func Items(tbl [][]int, cells []Cell) []int {
+	list := make([]int, 0, len(cells))
+	for _, c := range cells {
+		list = append(list, tbl[c.Row][c.Col])
+	}
+	return list
+}

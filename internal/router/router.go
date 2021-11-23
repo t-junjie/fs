@@ -5,6 +5,7 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -19,13 +20,14 @@ func Start() error {
 
 	r.Route("/files", func(r chi.Router) {
 		// Provider
-		r.Post("/", handleFileUpload)
+		r.Post("/", uploadFile)
 		r.Get("/", getFiles)
 
 		// Analyst
 		r.Get("/{fileID}", getFileDetails)
 		r.Delete("/{fileID}", removeFile)
-		r.Post("/{fileID}", computeSum)
+
+		r.Post("/sum", computeSum)
 	})
 
 	err := http.ListenAndServe(":8080", r)
@@ -37,17 +39,24 @@ func Start() error {
 }
 
 // save file data on server until database is implemented
-var files = make(map[storage.FileInfo][][]int)
+var files = make(map[uuid.UUID][][]int)
+var filesInfo = make(map[uuid.UUID]storage.FileInfo)
 
-type Message struct {
+type FilesResponse struct {
 	Files []storage.FileInfo `json:"files"`
 }
 
-func handleFileUpload(w http.ResponseWriter, r *http.Request) {
+type FileResponse struct {
+	Files storage.FileInfo `json:"files"`
+}
+
+func uploadFile(w http.ResponseWriter, r *http.Request) {
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		msg := Message{}
-		writeResponse(w, http.StatusBadRequest, msg)
+		writeResponseHeader(w, http.StatusInternalServerError)
+		e := APIErrorResponse{ErrorMsg: "unable to process file"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
 
 	defer file.Close()
@@ -55,84 +64,150 @@ func handleFileUpload(w http.ResponseWriter, r *http.Request) {
 	// [filename ext]
 	ext := strings.Split(header.Filename, ".")[1]
 	if ext != "csv" {
-		msg := Message{}
-		writeResponse(w, http.StatusBadRequest, msg)
+		writeResponseHeader(w, http.StatusBadRequest)
+		e := APIErrorResponse{ErrorMsg: "unable to process file"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
 
 	tbl, err := storage.ConvertToTable(file)
 	if err != nil {
-		msg := Message{}
-		writeResponse(w, http.StatusInternalServerError, msg)
+		writeResponseHeader(w, http.StatusInternalServerError)
+		e := APIErrorResponse{ErrorMsg: "unable to process file"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
 
 	rowCount, colCount := storage.Size(tbl)
 
+	id := uuid.New()
 	info := storage.FileInfo{
-		Id:       uuid.New(),
+		Id:       &id,
 		Name:     header.Filename,
 		Size:     ByteCountSI(header.Size),
 		RowCount: rowCount,
 		ColCount: colCount,
 	}
 
-	files[info] = tbl
+	files[id] = tbl
+	filesInfo[id] = info
 
-	msg := Message{Files: []storage.FileInfo{info}}
-	writeResponse(w, http.StatusOK, msg)
-
+	writeResponseHeader(w, http.StatusOK)
+	json.NewEncoder(w).Encode(FileResponse{info})
 }
 
 func getFiles(w http.ResponseWriter, r *http.Request) {
 	info := make([]storage.FileInfo, 0)
-	for i := range files {
-		info = append(info, i)
+	for _, fi := range filesInfo {
+		info = append(info, fi)
 	}
 
-	msg := Message{Files: info}
+	writeResponseHeader(w, http.StatusOK)
+	if len(info) == 0 {
+		json.NewEncoder(w).Encode(FilesResponse{info})
+		return
+	}
 
-	writeResponse(w, http.StatusOK, msg)
+	json.NewEncoder(w).Encode(FilesResponse{info})
 }
 
 func getFileDetails(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
-
-	info := make([]storage.FileInfo, 0)
-
 	id, err := uuid.Parse(fileID)
-	if err == nil {
-		for i := range files {
-			if id == i.Id {
-				info = append(info, i)
-				break
-			}
-		}
+
+	if err != nil {
+		writeResponseHeader(w, http.StatusBadRequest)
+		e := APIErrorResponse{ErrorMsg: "invalid uuid"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
 
-	msg := Message{Files: info}
-	writeResponse(w, http.StatusOK, msg)
+	info, ok := filesInfo[id]
+	if !ok {
+		writeResponseHeader(w, http.StatusNotFound)
+		e := APIErrorResponse{ErrorMsg: "file not found"}
+		json.NewEncoder(w).Encode(e)
+		return
+	}
 
+	writeResponseHeader(w, http.StatusOK)
+	json.NewEncoder(w).Encode(FileResponse{info})
 }
 
 func removeFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
-	id := uuid.MustParse(fileID)
+	id, err := uuid.Parse(fileID)
 
-	var info storage.FileInfo
-	for i := range files {
-		if id == i.Id {
-			info = i
-			delete(files, i)
-		}
+	if err != nil {
+		writeResponseHeader(w, http.StatusBadRequest)
+		e := APIErrorResponse{ErrorMsg: "invalid uuid"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
 
-	msg := Message{
-		Files: []storage.FileInfo{info},
+	info, ok := filesInfo[id]
+	if !ok {
+		writeResponseHeader(w, http.StatusNotFound)
+		e := APIErrorResponse{ErrorMsg: "file not found"}
+		json.NewEncoder(w).Encode(e)
+		return
 	}
-	writeResponse(w, http.StatusOK, msg)
+
+	delete(files, id)
+	delete(filesInfo, id)
+
+	writeResponseHeader(w, http.StatusOK)
+	json.NewEncoder(w).Encode(FileResponse{info})
 }
 
 func computeSum(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("computeSum endpoint reached"))
+	// reject content if not json
+	cTypeHead := r.Header.Get("Content-Type")
+	mediatype, _, err := mime.ParseMediaType(cTypeHead)
+	if err != nil || mediatype != "application/json" {
+		writeResponseHeader(w, http.StatusBadRequest)
+		r := struct {
+			Empty *string `json:"empty,omitempty"`
+		}{}
+		json.NewEncoder(w).Encode(r)
+		return
+	}
+
+	var cells []storage.Cell
+
+	err = json.NewDecoder(r.Body).Decode(&cells)
+	if err != nil {
+		writeResponseHeader(w, http.StatusBadRequest)
+		r := struct {
+			Empty *string `json:"empty,omitempty"`
+		}{}
+		json.NewEncoder(w).Encode(r)
+		return
+	}
+
+	// create a map to hold cell values sorted by the map key
+	query := make(map[uuid.UUID][]storage.Cell)
+	for _, cell := range cells {
+		query[cell.Id] = append(query[cell.Id], cell)
+	}
+
+	var results []int
+	for id, cells := range query {
+		tbl := files[id]
+		r := storage.Items(tbl, cells)
+		results = append(results, r...)
+	}
+
+	sum := 0
+	for _, s := range results {
+		sum += s
+	}
+
+	writeResponseHeader(w, http.StatusOK)
+	s := struct {
+		Sum int `json:"sum"`
+	}{Sum: sum}
+	json.NewEncoder(w).Encode(s)
 }
 
 // ByteCountSI returns a human-readable string representation of the file size
@@ -150,8 +225,7 @@ func ByteCountSI(b int64) string {
 		float64(b)/float64(div), "kMGTPE"[exp])
 }
 
-func writeResponse(w http.ResponseWriter, statusCode int, message Message) {
+func writeResponseHeader(w http.ResponseWriter, statusCode int) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(message)
 }
