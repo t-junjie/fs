@@ -18,7 +18,7 @@ import (
 func Start() error {
 	r := chi.NewRouter()
 
-	r.Route("v1/files", func(r chi.Router) {
+	r.Route("/v1/files", func(r chi.Router) {
 		// Provider
 		r.Post("/", uploadFile)
 		r.Get("/", getFiles)
