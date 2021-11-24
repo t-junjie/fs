@@ -41,7 +41,7 @@ This will start the server program.
 ## How to run and test
 
 - Download and install [Postman](https://www.postman.com/downloads/) for testing.
-- Run the server and initiate an appropriate request to http://localhost:8080/files via Postman.
+- Run the server and initiate an appropriate request to http://localhost:8080/v1/files via Postman.
 - Test data is available in the testdata/ directory.
 - Test cases are stated below.
 
@@ -49,7 +49,7 @@ This will start the server program.
 
 ### Upload a binary file containing a 2 dimensional array of integers in csv format to the server
 
-- Send a POST request to http://localhost:8080/files.
+- Send a POST request to http://localhost:8080/v1/files.
 - The request body must be of the type multipart/form-data, where "file" is the key and "data/test.csv" is the value, the binary file to be sent.
 
 <img src="./testdata/Uploading.png"  width="600" height="250">
@@ -58,7 +58,7 @@ This will start the server program.
 
 ### Retrieve a list of all files available on the server
 
-- Send a GET request to http://localhost:8080/files
+- Send a GET request to http://localhost:8080/v1/files
 
 ### Retrieve the details of a specific file, such as the number of rows and columns
 
