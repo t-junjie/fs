@@ -1,0 +1,258 @@
+openapi: 3.0.0
+servers:
+  # Added by API Auto Mocking Plugin
+  - description: SwaggerHub API Auto Mocking
+    url: https://virtserver.swaggerhub.com/junjie-t/fileserver/1.0.0
+info:
+  description: Simple API for file manipulation workflows
+  version: "1.0.0"
+  title: fs API
+  contact:
+    email: you@your-company.com
+  license:
+    name: Apache 2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+tags:
+  - name: admins
+    description: Secured Admin-only calls
+  - name: developers
+    description: Operations available to regular developers
+paths:
+  /v1/files:
+    get:
+      tags:
+        - developers
+      summary: retrieve list of files
+      operationId: getFiles
+      description: |
+        Retrieve a list of all files available on the server.
+      responses:
+        '200':
+          description: successfully upload csv file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/files'
+    post:
+      tags:
+        - developers
+      summary: upload a csv file to the server
+      operationId: uploadFile
+      description: |
+        Upload a csv file to the server.
+      responses:
+        '200':
+          description: successfully upload csv file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/file'
+        '400':
+          description: invalid file type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/fileerror'
+        '500':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/fileerror'
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                fileName:
+                  type: string
+                  format: binary
+        description: binary file containing 2d array of integers in csv format
+  /v1/files/{fileID}:
+    get:
+      parameters: 
+        - name : fileID
+          in: path
+          description: id of a file
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      tags:
+        - developers
+      summary: retrieve the details of a specific file 
+      operationId: getFile
+      description: |
+        Retrieve the details of file with fileID (i.e. fileID, filename, filesize, no. of rows, cols)
+      responses:
+        '200':
+          description: successfully upload csv file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/file'
+        '400':
+          description: invalid file type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/uuiderror'
+        '404':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notfounderror'
+    delete:
+      parameters: 
+        - name : fileID
+          in: path
+          description: id of a file
+          required: true
+          schema: 
+            type: string
+            format: uuid
+      tags:
+        - developers
+      summary: retrieve the details of a specific file 
+      operationId: removeFile
+      description: |
+        Delete a file with fileID from the server.
+      responses:
+        '200':
+          description: successfully upload csv file
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/file'
+        '400':
+          description: invalid file type
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/uuiderror'
+        '404':
+          description: internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/notfounderror'
+  /v1/files/sum:
+    post:
+      tags:
+        - developers
+      summary: Calculate the sum of a list of integers
+      operationId: computeFile
+      description: |
+        Calculate the sum of a list of integers taken from the csv files.
+        The request body has to contain an array of {uuid,row,col}, where uuid is the resource identifier for the csv file on the server, row and col are the rows and column indices (zero-based) in the csv file.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/query'
+      responses:
+        '200':
+          description: successfully calculated sum
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/sum'
+        '400':
+          description: invalid request
+components:
+  schemas:
+    sum:
+      required:
+      - sum
+      properties:
+        sum:
+          type: integer
+          example: 10
+    query:
+      type: array
+      items: 
+        $ref: '#/components/schemas/cell'
+      example:
+        [{"uuid":"3a3192fd-d5b0-468a-bbf1-a066b9f1b679","row":1,"col":2},{"uuid":"3a3192fd-d5b0-468a-bbf1-a066b9f1b63","row":4,"col":5}]
+    cell:
+      type: object
+      required:
+        - uuid
+        - row
+        - col
+      properties:
+        uuid:
+          type: string
+          format: uuid
+          example: "3a3192fd-d5b0-468a-bbf1-a066b9f1b679"
+        row:
+          type: integer
+        col:
+          type: integer
+      example:
+        {"uuid":"3a3192fd-d5b0-468a-bbf1-a066b9f1b679","row":1,"col":2}
+    files:
+      type: array
+      items:
+          $ref: '#/components/schemas/FileInfo'
+      example:
+        files:
+         [{id: d290f1ee-6c54-4b01-90e6-d701748f0851 ,name: test1.csv,size: 30kb,rows: 10, cols: 20}, {id: 70cdbfc2-d263-40bb-98ce-0b0ba4c77983,name: test2.csv,size: 10kb,rows: 40, cols: 30}]
+    file:
+      type: object
+      items:
+          $ref: '#/components/schemas/FileInfo'
+      example:
+        file:
+         {"id": "311ed6fe-0374-4bb5-9d4e-1b3166189a81", "name": "test.csv", "size": "30.4 kB", "rows": 100, "cols": 104 }
+    fileerror:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "unable to process file"
+    uuiderror:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "invalid uuid"
+    notfounderror:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+          example: "file not found"
+    FileInfo:
+      type: object
+      required:
+        - id
+        - name
+        - size
+        - rows
+        - cols
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: d290f1ee-6c54-4b01-90e6-d701748f0851
+        name:
+          type: string
+          example: test.csv
+        size: 
+          type: string
+          example: 30.4 kB
+        rows:
+          type: integer
+          example : 20
+        cols:
+          type: integer
+          example: 15

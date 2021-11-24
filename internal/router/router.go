@@ -18,7 +18,7 @@ import (
 func Start() error {
 	r := chi.NewRouter()
 
-	r.Route("/files", func(r chi.Router) {
+	r.Route("v1/files", func(r chi.Router) {
 		// Provider
 		r.Post("/", uploadFile)
 		r.Get("/", getFiles)
@@ -37,6 +37,17 @@ func Start() error {
 
 	return nil
 }
+
+// // Consider implementing dependency injection for testing HTTP handlers
+// type Store struct {
+//     data DataInterface
+// }
+
+// type DataInterface interface{
+//   // presumably some method signature
+// }
+
+// func (s *Store) getFiles(w http.ResponseWriter, r *http.Request) {...}
 
 // save file data on server until database is implemented
 var files = make(map[uuid.UUID][][]int)
